@@ -6,3 +6,8 @@
 /discord_bot/package.json
 /discord_bot/tsconfig.json
 /discord_bot/node_modules
+
+# rust script files
+/rust_script/Cargo.lock
+/rust_script/Cargo.toml
+/rust_script/target
