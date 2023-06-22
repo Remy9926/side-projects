@@ -18,13 +18,13 @@ fn get_audit_links(url: &str, mut audits: &mut Vec<String>) -> Result<(), Box<dy
     let tab = browser.new_tab()?;
     
     tab.navigate_to(&url)?;
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_millis(2000));
     
     let raw_html = tab.get_content().unwrap();
     let document = Html::parse_document(&raw_html);
-    let div_selector = Selector::parse(r#"a[aria-label="Go to audit competition repo (Opens in a new window)"]"#).unwrap();
+    let aria_label_selector = Selector::parse(r#"a[aria-label="Go to audit competition repo (Opens in a new window)"]"#).unwrap();
     
-    for element in document.select(&div_selector) {
+    for element in document.select(&aria_label_selector) {
         audits.push(element.value().attr("href").unwrap().to_string());
     }
 
