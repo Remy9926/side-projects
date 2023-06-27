@@ -1,3 +1,5 @@
+.env
+
 # discord bot files
 /discord_bot/.env
 /discord_bot/.vscode
