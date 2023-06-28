@@ -13,11 +13,8 @@ const GITHUB_API_URL: &str = "https://api.github.com/repos/code-423n4/";
 static mut SOLIDITY_FILES: Vec<String> = Vec::new();
 
 fn main() {
-    let _ = get_contract_bytecode();
-    //let output: Vec<_> = project.compile().unwrap().into_contract_bytecodes().collect();
-    //println!("{:?}", output);
+    //let _ = get_contract_bytecode();
     //let url = "https://raw.githubusercontent.com/code-423n4/2023-06-lybra/main/contracts/mocks/chainLinkMock.sol";
-    //let mut file = fs::File::create("./contracts/chainLinkMock.sol").unwrap();
     //file.write_all(b"Henlo bera");
     //let mut opened_file = fs::File::open("./contracts/chainLinkMock.sol").unwrap();
     //let mut contents = String::new();
@@ -94,6 +91,9 @@ fn parse_json(response: &str) -> Result<(), Box<dyn Error>> {
 
 fn get_contract_bytecode() { //push all solidity files into vector and see if they compile to some bytecode then figure out how to import
     unsafe {
+        SOLIDITY_FILES.push("chainLinkMock.sol".to_owned());
+        SOLIDITY_FILES.push("mockEtherPriceOracle.sol".to_owned());
+        SOLIDITY_FILES.push("mockCurve.sol".to_owned());
         let project = Project::builder()
         .paths(ProjectPathsConfig::hardhat("./contracts").unwrap())
         .set_auto_detect(true)
@@ -104,6 +104,31 @@ fn get_contract_bytecode() { //push all solidity files into vector and see if th
             let get_bytecode: Vec<_> = output.into_contract_bytecodes().collect(); //since it compiles file by file, the size of this vector will be 1
             let (_, compact_contract_bytecode) = &get_bytecode[0]; //extract the CompactContractBytecode object
             println!("{:?}", compact_contract_bytecode.bytecode.clone().unwrap().object.into_bytes().unwrap().to_string()); //finally get the bytecode and print it out
+        }
+    }
+}
+
+fn create_contract_locally(file_name: &str) { //create the contract locally along with all the imports to then be able to compile + get bytecode
+    let mut write_to_file = fs::File::create("./contracts/".to_owned() + &file_name).unwrap(); //create a new file replace test.sol with the actual .sol file name
+    // let opened_file = fs::File::open("./contracts/mockEUSD.sol").unwrap();
+    //let content = fs::read_to_string("./contracts/mockEUSD.sol").unwrap(); //wont need these two
+    //let all_lines: Vec<_> = content.split("\n").collect();                 //lines because will be fetching data directly from github api
+    let client = reqwest::blocking::Client::new();
+    let mut header_map = reqwest::header::HeaderMap::new();
+    header_map.insert("User-")
+    for line in all_lines { // need all_lines to be equal to the download_url content.split("\n")
+        let line_content: Vec<_> = line.split(" ").collect();
+        if line_content[0] == "import" {
+            let path: Vec<_> = line_content[1].split("/").collect();
+            if path[0] != r#""@openzeppelin"# {
+                let file_path = path[path.len() - 1];
+                let import_file = file_path[..file_path.len() - 2].to_owned();
+                writeln!(write_to_file, "{}", r#"import "./"#.to_owned() + &import_file + r#"";"#).unwrap();
+            } else {
+                writeln!(write_to_file, "{}", line).unwrap();
+            }
+        } else {
+            writeln!(write_to_file, "{}", line).unwrap();
         }
     }
 }
