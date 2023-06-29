@@ -11,7 +11,6 @@ use std::io::prelude::*;
 use std::collections::HashMap;
 
 const GITHUB_API_URL: &str = "https://api.github.com/repos/code-423n4/";
-static mut SOLIDITY_FILES: Vec<String, String> = Vec::new();
 
 fn main() {
     //let _ = create_contract_locally("https://raw.githubusercontent.com/code-423n4/2023-06-lybra/main/contracts/mocks/mockEUSD.sol");
@@ -24,6 +23,7 @@ fn main() {
     //println!("{}", contents);
     //
     dotenv().ok();
+    let mut SOLIDITY_FILES: HashMap<&str, Vec<Vec<&str>>> = HashMap::new();
     let url = "https://code4rena.com/contests";
     let mut audits = Vec::new();
     let _ = get_audit_links(url, &mut audits);
@@ -31,7 +31,7 @@ fn main() {
         let v: Vec<&str> = element.split("/").collect(); 
         let github_url = GITHUB_API_URL.to_owned() + v[v.len() - 1] + "/contents";
         println!("{}", github_url);
-        get_content_info(&github_url);
+        get_content_info(&github_url, &mut SOLIDITY_FILES);
     }
     unsafe {
         println!("{:?}", SOLIDITY_FILES);
@@ -57,7 +57,7 @@ fn get_audit_links(url: &str, audits: &mut Vec<String>) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-fn get_content_info(url: &str) {
+fn get_content_info(url: &str, files: &mut HashMap<&str, Vec<Vec<&str>>>) {
     let client = reqwest::blocking::Client::new();
     let mut header_map = reqwest::header::HeaderMap::new();
     header_map.insert("User-Agent", reqwest::header::HeaderValue::from_str("remy9926").unwrap());
@@ -66,26 +66,30 @@ fn get_content_info(url: &str) {
     let request_builder = client.request(reqwest::Method::GET, url).headers(header_map);
     let response = request_builder.send().unwrap().text().unwrap();
     //response = response[1..response.len() - 1].to_string();
-    let _ = parse_json(&response);
+    let _ = parse_json(&response, files);
 }
 
-fn parse_json(response: &str) -> Result<(), Box<dyn Error>> {
+fn parse_json(response: &str, files: &mut HashMap<&str, Vec<Vec<&str>>>) -> Result<(), Box<dyn Error>> {
     let json: Value = serde_json::from_str(response).unwrap();
     for i in 0..json.as_array().unwrap().len() {
         let file_json = json.as_array().unwrap().get(i);
         let file_type = file_json.unwrap()["type"].as_str().unwrap();
         if file_type == "file" {
             if file_json.unwrap()["name"].as_str().unwrap().ends_with(".sol") {
-                println!("{}", file_json.unwrap()["name"].as_str().unwrap().to_owned() + " is a solidity file!");
                 // create contract locally here pass the download_url field into fn
-                unsafe {
-                    SOLIDITY_FILES.push(file_json.unwrap()["name"].as_str().unwrap().to_owned(), file_json.unwrap()["download_url"].as_str().unwrap().to_owned());
+                let split_string: Vec<_> = file_json.unwrap()["url"].as_str().unwrap().split("/").collect();
+                let repo_name = split_string[5];
+                let file_name_download_url = vec![file_json.unwrap()["name"].as_str().unwrap(), file_json.unwrap()["download_url"].as_str().unwrap()];
+                if files.contains_key(&repo_name) {
+                    let mut repo_files = files.get_mut(repo_name).unwrap();
+                    repo_files.push(file_name_download_url);
+                } else {
+                    files.insert(&repo_name, Vec::new());
                 }
             }
         } else {
-            println!("{}", file_json.unwrap()["name"].as_str().unwrap().to_owned() + " is not a solidity file");
             let dir_url = file_json.unwrap()["url"].as_str().unwrap();
-            let _ = get_content_info(dir_url);
+            let _ = get_content_info(dir_url, files);
         }
     }
     
