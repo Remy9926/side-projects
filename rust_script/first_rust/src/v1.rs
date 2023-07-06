@@ -11,11 +11,6 @@ use std::io::prelude::*;
 
 const GITHUB_API_URL: &str = "https://api.github.com/repos/code-423n4/";
 
-enum ContractType {
-    Interface(String),
-    Contract(String)
-}
-
 fn main() {
     dotenv().ok();
     let url = "https://code4rena.com/contests";
@@ -115,6 +110,7 @@ fn create_contract_locally(contract_url: &str) { //create the contract locally a
                 statement_string = statement_string.trim().to_owned();
                 let split_statement: Vec<_> = statement_string.split(" ").collect();
                 let split_line: Vec<_> = split_statement[split_statement.len() - 1].split("/").collect();
+                let file_name = split_line[split_line.len() - 1];
                 let new_line = split_statement[0..split_statement.len() - 1].join(" ");
                 if !split_line[0].contains("@") {
                     let file_name = split_line[split_line.len() - 1];
