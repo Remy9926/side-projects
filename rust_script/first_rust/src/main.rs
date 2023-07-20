@@ -8,17 +8,21 @@ use dotenv::dotenv;
 use ethers_solc::{Project, ProjectPathsConfig};
 use std::fs;
 use std::io::prelude::*;
+use std::collections::HashMap;
 
 const GITHUB_API_URL: &str = "https://api.github.com/repos/code-423n4/";
 
+#[derive(Debug)]
 enum ContractType {
     Interface(String),
-    Contract(String)
+    Contract(String),
+    None
 }
 
 fn main() {
     dotenv().ok();
     let url = "https://code4rena.com/contests";
+    let mut repos_and_contracts: HashMap<String, HashMap<String, ContractType>> = HashMap::new();
     let mut result: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut contract_urls: Vec<String> = Vec::new();
     let mut audits = Vec::new();
@@ -28,7 +32,10 @@ fn main() {
         let v: Vec<&str> = element.split("/").collect();
         let repo_name =  v[v.len() - 1];
         let github_url = GITHUB_API_URL.to_owned() + &repo_name + "/contents";
-        get_repo_info(&github_url, &mut contract_urls);
+        let mut repo_contracts: HashMap<String, ContractType> = HashMap::new();
+        repos_and_contracts.insert(repo_name.to_owned(), repo_contracts);
+        get_repo_info(&github_url, &mut contract_urls, &mut repos_and_contracts, &repo_name);
+        
         //entire repo has been parsed for .sol files
         for contract_url in &contract_urls {
         //each element is the download url
@@ -36,10 +43,10 @@ fn main() {
         }
         let vector_of_tuples = get_repo_bytecodes(&contract_urls);
         result.push((repo_name.to_owned(), vector_of_tuples));
-        // clear contract url vector after each repo
+        //clear contract url vector after each repo
         let _ = contract_urls.clear();
     }
-    println!("{:?}", result);
+    println!("{:?}", repos_and_contracts);
 }
 
 fn get_audit_links(url: &str, audits: &mut Vec<String>) -> Result<(), Box<dyn Error>> {
@@ -60,7 +67,7 @@ fn get_audit_links(url: &str, audits: &mut Vec<String>) -> Result<(), Box<dyn Er
     Ok(())
 }
 
-fn get_repo_info(url: &str, contract_urls: &mut Vec<String>) {
+fn get_repo_info(url: &str, contract_urls: &mut Vec<String>, repos_and_contracts: &mut HashMap<String, HashMap<String, ContractType>>, repo_name: &str) {
     let client = reqwest::blocking::Client::new();
     let mut header_map = reqwest::header::HeaderMap::new();
     header_map.insert("User-Agent", reqwest::header::HeaderValue::from_str("remy9926").unwrap());
@@ -69,21 +76,41 @@ fn get_repo_info(url: &str, contract_urls: &mut Vec<String>) {
     let request_builder = client.request(reqwest::Method::GET, url).headers(header_map);
     let response = request_builder.send().unwrap().text().unwrap();
     //response = response[1..response.len() - 1].to_string();
-    let _ = parse_json(&response, contract_urls);
+    let _ = parse_json(&response, contract_urls, repos_and_contracts, repo_name);
 }
 
-fn parse_json(response: &str, contract_urls: &mut Vec<String>) -> Result<(), Box<dyn Error>> {
+fn parse_json(response: &str, contract_urls: &mut Vec<String>, repos_and_contracts: &mut HashMap<String, HashMap<String, ContractType>>, repo_name: &str) -> Result<(), Box<dyn Error>> {
     let json: Value = serde_json::from_str(response).unwrap();
     for i in 0..json.as_array().unwrap().len() {
         let file_json = json.as_array().unwrap().get(i);
         let file_type = file_json.unwrap()["type"].as_str().unwrap();
-        if file_type == "file" {
+        if file_type == "file" { //only gets sol files, submodules not gotten
+            let file_name = file_json.unwrap()["name"].as_str().unwrap().to_owned();
+            let new_contract = ContractType::None;
+            let download_url = file_json.unwrap()["download_url"].clone();
             if file_json.unwrap()["name"].as_str().unwrap().ends_with(".sol") && !file_json.unwrap()["name"].as_str().unwrap().ends_with(".t.sol") {
-                contract_urls.push(file_json.unwrap()["download_url"].as_str().unwrap().to_owned());
+                // if it is a file then it will have a download_url
+                contract_urls.push(download_url.as_str().unwrap().to_owned());
+                let repo_contracts = repos_and_contracts.get_mut(repo_name).unwrap();
+                if !repo_contracts.contains_key(&file_name) {
+                    println!("{} is a .sol file", file_name);
+                    repo_contracts.insert(file_name.clone(), new_contract);
+                }
+            } else if download_url == Value::Null {
+                let git_url = file_json.unwrap()["git_url"].as_str().unwrap().to_owned();
+                let url_info: Vec<&str> = git_url.split("/").collect();
+                let creator_name = url_info[4].to_owned();
+                let submodule_name = url_info[5].to_owned();
+                if !repos_and_contracts.get(repo_name.clone()).unwrap().contains_key(&submodule_name) {
+                    let submodule_api_url = "https://api.github.com/repos/".to_owned() + &creator_name + "/" + &submodule_name + "/contents/";
+                    println!("Found a submodule {}", submodule_name);
+                    println!("{:?}", submodule_api_url);
+                    let _ = get_repo_info(&submodule_api_url, contract_urls, repos_and_contracts, repo_name);
+                }
             }
         } else {
             let dir_url = file_json.unwrap()["url"].as_str().unwrap();
-            let _ = get_repo_info(dir_url, contract_urls);
+            let _ = get_repo_info(dir_url, contract_urls, repos_and_contracts, repo_name);
         }
     }
     
@@ -175,3 +202,5 @@ fn get_new_import_line(file_name: String) -> String {
         return r#" '../"#.to_owned() + &file_name
     }
 }
+
+//yieldbox, tap-token-audit, tapioca-sdk-audit, tapioca-periph-audit, tapioca-sdk-audit
